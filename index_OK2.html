@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>Aztec tisztító</title>
+  <style>
+    #status { font-weight: bold; margin-top: 8px; }
+    .ok { color: green; }
+    .fail { color: red; }
+    video, canvas { width: 300px; max-width: 100%; }
+  </style>
+
+  <!-- ZXing böngészős UMD build -->
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+
+  <!-- Lokális bwip-js böngészős build -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bwip-js/4.7.0/bwip-js-min.min.js"></script>
+</head>
+<body>
+  <button id="scanBtn">KAMERA INDÍTÁSA</button>
+  <div id="status">Várakozás...</div>
+
+  <video id="preview" autoplay playsinline></video>
+
+  <h3>Generált Aztec kód</h3>
+  <canvas id="aztecCanvas"></canvas>
+
+  <script>
+    const scanBtn = document.getElementById('scanBtn');
+    const statusEl = document.getElementById('status');
+    const video = document.getElementById('preview');
+    const canvas = document.getElementById('aztecCanvas');
+
+    // ZXingBrowser globális névtérből:
+    const ZXingBrowser = window.ZXingBrowser;
+    const ZXing = window.ZXingBrowser; // rövidítés
+    const codeReader = new ZXing.BrowserMultiFormatReader();
+
+    function setStatus(ok, text) {
+      statusEl.textContent = text;
+      statusEl.className = ok ? 'ok' : 'fail';
+    }
+
+    scanBtn.addEventListener('click', async () => {
+      setStatus(false, 'Kamera indul...');
+      try {
+        const constraints = {
+          video: { facingMode: 'environment' }
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+
+        // Eszközlista opcionális, itt közvetlenül a videóelemet használjuk
+        codeReader.decodeFromVideoDevice(
+          null, // alapértelmezett kamera
+          video,
+          (result, err, controls) => {
+            if (result) {
+              const text = result.getText();
+              setStatus(true, 'SIKERES BEOLVASÁS');
+
+              // Ha csak egy beolvasás kell, leállítjuk
+              controls.stop();
+
+              try {
+                // Aztec kód generálása bwip-js-sel
+                bwipjs.toCanvas(canvas, {
+                  bcid: 'azteccode',
+                  text: text,
+                  scale: 4,
+                });
+              } catch (e) {
+                alert('getUserMedia hiba: ' + e.name + ' - ' + e.message);
+                setStatus(false, 'SIKERTELEN BEOLVASÁS (generálási hiba)');
+              }
+            } else if (err && !(err instanceof ZXing.NotFoundException)) {
+              console.error(err);
+              setStatus(false, 'SIKERTELEN BEOLVASÁS');
+            }
+          },
+          {
+            // Csak Aztec formátumokra szűrünk
+            // Nem minden ZXing build támogatja a hintet, de ha igen:
+            // hints: new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.AZTEC]]]),
+          }
+        );
+      } catch (e) {
+        alert('beovasás hiba: ' + e.name + ' - ' + e.message);
+        setStatus(false, 'SIKERTELEN BEOLVASÁS (kamera hiba)');
+      }
+    });
+  </script>
+</body>
+</html>
